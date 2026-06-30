@@ -37,26 +37,46 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
 
   const url = req.url.split('?')[0].replace(/\/$/, '') || '/';
-  console.log('URL reçue:', url);
 
   try {
     if (url === '/api/fixtures') {
       const cached = getCache('fixtures');
-      if (cached) { res.writeHead(200); res.end(JSON.stringify(cached)); return; }
+      if (cached) {
+        console.log('✅ CACHE HIT - fixtures (pas d\'appel API)');
+        res.setHeader('X-Cache', 'HIT');
+        res.writeHead(200); res.end(JSON.stringify(cached)); return;
+      }
+      console.log('🌐 CACHE MISS - fixtures → appel API réel');
       const data = await fetchAPI('/fixtures?league=1&season=2026');
       setCache('fixtures', data, TTL.fixtures);
+      res.setHeader('X-Cache', 'MISS');
       res.writeHead(200); res.end(JSON.stringify(data));
 
     } else if (url === '/api/standings') {
       const cached = getCache('standings');
-      if (cached) { res.writeHead(200); res.end(JSON.stringify(cached)); return; }
+      if (cached) {
+        console.log('✅ CACHE HIT - standings (pas d\'appel API)');
+        res.setHeader('X-Cache', 'HIT');
+        res.writeHead(200); res.end(JSON.stringify(cached)); return;
+      }
+      console.log('🌐 CACHE MISS - standings → appel API réel');
       const data = await fetchAPI('/standings?league=1&season=2026');
       setCache('standings', data, TTL.standings);
+      res.setHeader('X-Cache', 'MISS');
       res.writeHead(200); res.end(JSON.stringify(data));
+
+    } else if (url === '/api/cache-status') {
+      const status = Object.entries(cache).map(([key, e]) => ({
+        key,
+        age_secondes: Math.round((Date.now() - e.timestamp) / 1000),
+        expire_dans: Math.round((e.ttl - (Date.now() - e.timestamp)) / 1000),
+      }));
+      res.writeHead(200);
+      res.end(JSON.stringify({ entrees_en_cache: status.length, details: status }, null, 2));
 
     } else if (url === '/api' || url === '/') {
       res.writeHead(200);
-      res.end(JSON.stringify({ status: 'ok', message: 'Proxy Render actif' }));
+      res.end(JSON.stringify({ status: 'ok', message: 'Proxy Render actif avec cache' }));
 
     } else {
       res.writeHead(404);
